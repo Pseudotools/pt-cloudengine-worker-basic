@@ -38,9 +38,7 @@ WORKDIR /app
 # ─────────────────────────────────────────────
 # 5. Environment variables
 # ─────────────────────────────────────────────
-ENV MODEL_PATH=/workspace/ComfyUI/models \
-    CUSTOM_NODE_PATH=/app/custom_nodes \
-    HF_HUB_DISABLE_SYMLINKS_WARNING=1
+ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
 
 # ─────────────────────────────────────────────
 # 6. Metadata labels
@@ -49,4 +47,11 @@ LABEL maintainer="pseudotools"
 LABEL description="Pseudotools ComfyUI worker with baked required custom nodes and commonly-used models"
 LABEL version="0.1.0"
 
-WORKDIR /app
+# ─────────────────────────────────────────────
+# 7. Runtime setup and entrypoint
+# ─────────────────────────────────────────────
+COPY scripts/setup_models.sh /app/setup_models.sh
+RUN chmod +x /app/setup_models.sh
+
+# Set the entrypoint to dynamically configure model paths
+ENTRYPOINT ["/app/setup_models.sh"]

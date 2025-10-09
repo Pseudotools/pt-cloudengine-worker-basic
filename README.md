@@ -9,6 +9,27 @@ This worker provides a baseline ComfyUI runtime with:
 - Automatically cloned [Pseudotools "Pseudocomfy" Custom Nodes](https://github.com/Pseudotools/Pseudocomfy)
 - Configurable persistent storage at `/runpod-volume/models` for additional models
 
+## Model Path Configuration
+
+This worker automatically configures ComfyUI to recognize both baked-in and shared models.
+
+* Baked-in models live in `/workspace/ComfyUI/models` (downloaded during build).
+* Optional shared models can be mounted from a RunPod **network volume** at `/runpod-volume/models`.
+* On startup, the worker updates `/workspace/ComfyUI/extra_model_paths.yaml` to include all available paths.
+
+Example log output:
+
+```
+🔧 Configuring ComfyUI model paths...
+  • Baked-in models:    /workspace/ComfyUI/models
+  • Network volume path: /runpod-volume/models
+✅ Found network models at /runpod-volume/models
+  + Adding /runpod-volume/models/checkpoints to extra_model_paths.yaml
+🧩 Final model paths written to /workspace/ComfyUI/extra_model_paths.yaml
+```
+
+If no network volume is mounted, the worker continues using the baked-in models only.
+
 ## References
 - [RunPod Worker Documentation](https://docs.runpod.io/serverless/workers/)
 - [RunPod ComfyUI Worker Repo](https://github.com/runpod-workers/worker-comfyui)
@@ -53,16 +74,18 @@ The worker runs entirely within RunPod’s serverless infrastructure and communi
 
 Under **Environment Variables**, add the following:
 
-| Variable             | Example                    | Purpose                                      | Secret? |
-| -------------------- | -------------------------- | -------------------------------------------- | ------- |
-| `COMFYUI_AUTH_TOKEN` | `pseudotools-secret-token` | Used by clients to authenticate API requests | ✅       |
-| `MODEL_PATH`         | `/app/models`              | Directory containing baked-in models         | ❌       |
-| `CUSTOM_NODE_PATH`   | `/app/custom_nodes`        | Directory containing custom node definitions | ❌       |
-| `LOG_LEVEL`          | `info`                     | Logging verbosity for worker                 | ❌       |
+| Variable              | Example                    | Purpose                                                                                                                                        | Secret? |
+| --------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `COMFYUI_AUTH_TOKEN`  | `pseudotools-secret-token` | Bearer token required to authenticate API requests to this worker. Clients must include it in the `Authorization` header when submitting jobs. *(Note: The dispatcher refers to this as `SERVERLESS_BEARER_TOKEN`)* | ✅       |
+| `NETWORK_VOLUME_PATH` | `/runpod-volume`           | Optional path for network-mounted storage. Used if attached to this endpoint.                                                                  | ❌       |
+| `LOG_LEVEL`           | `info`                     | Logging verbosity for the worker.                                                                                                              | ❌       |
 
-💡 **Important:**
-Secrets like `COMFYUI_AUTH_TOKEN` are stored securely in RunPod and injected at runtime.
-They should never be included in GitHub or your Dockerfile.
+🟡 **Notes:**
+
+* `COMFYUI_AUTH_TOKEN` is **injected at runtime** from the RunPod environment.
+* This token is **not** used by ComfyUI itself; it is enforced by the **RunPod worker layer** that wraps ComfyUI.
+* The token prevents unauthorized access to your endpoint — only clients that include the correct bearer token can submit jobs.
+* Keep this secret private and **never commit it** to GitHub or Dockerfiles.
 
 📘 Reference: [RunPod Environment Variables](https://docs.runpod.io/serverless/workers/environment-variables)
 
@@ -90,6 +113,41 @@ You can monitor progress in **Build Logs**.
 
 ---
 
+### 🔐 **Authenticating API Requests**
+
+The RunPod ComfyUI worker requires all API requests to include a valid bearer token for authentication.
+This token is defined by the environment variable `COMFYUI_AUTH_TOKEN` *(Note: The dispatcher refers to this as `SERVERLESS_BEARER_TOKEN`)*.
+
+**To set up:**
+
+1. In your RunPod endpoint settings, add:
+
+   ```
+   COMFYUI_AUTH_TOKEN=pseudotools-secret-token
+   ```
+2. When sending requests to your endpoint, include:
+
+   ```http
+   Authorization: Bearer pseudotools-secret-token
+   ```
+3. You will see the following log entries when authenticated:
+
+   ```
+   Authenticated with Bearer token
+   ```
+
+If this header is missing or incorrect, the worker will respond with:
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+This provides lightweight security for your worker endpoint without needing a separate authentication service.
+
+---
+
 ### 🧪 5. Test the Worker Endpoint
 
 Once deployment completes:
@@ -101,7 +159,7 @@ Once deployment completes:
    https://api.runpod.ai/v2/<worker-id>/run
    ```
 
-2. Send a test request:
+2. Send a test request with proper authentication:
 
    ```bash
    curl -X POST https://api.runpod.ai/v2/<worker-id>/run \
@@ -109,6 +167,8 @@ Once deployment completes:
      -H "Content-Type: application/json" \
      -d '{"input": {"prompt": "an architectural scene with natural light"}}'
    ```
+   
+   *(Note: Replace `<COMFYUI_AUTH_TOKEN>` with your actual token value. The dispatcher refers to this as `SERVERLESS_BEARER_TOKEN`)*
 
 3. The worker will respond with job metadata and begin processing.
    Jobs can be monitored via the RunPod dashboard or API.
@@ -119,15 +179,14 @@ Once deployment completes:
 
 ### 🧠 6. Model and Node Directories
 
-The following directories are used inside the container:
+**Model paths are configured dynamically at startup:**
+- Baked-in models: `/workspace/ComfyUI/models/` (downloaded during build)
+- Network volume models: `/runpod-volume/models/` (if mounted)
 
-| Variable           | Path                | Purpose                                                                                                                        |
-| ------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `MODEL_PATH`       | `/app/models`       | Contains baked-in models from the [Pseudotools Hugging Face repository](https://huggingface.co/pseudotools/pseudocomfy-models) |
-| `CUSTOM_NODE_PATH` | `/app/custom_nodes` | Contains Pseudotools custom node definitions cloned from GitHub                                                                |
+**Custom nodes are automatically available:**
+- Custom nodes: `/app/custom_nodes/` (cloned during build)
 
-These environment variables tell ComfyUI where to look for models and custom nodes;
-they don’t define which models exist.
+The startup script automatically updates ComfyUI's configuration to include all available model directories.
 
 Optionally, you can mount a persistent volume at `/runpod-volume/models`
 to add or update models without rebuilding the image.
@@ -139,10 +198,12 @@ to add or update models without rebuilding the image.
 After the worker starts, open the **Logs** tab in RunPod and confirm:
 
 ```
+🔧 Configuring ComfyUI model paths...
+  • Baked-in models:    /workspace/ComfyUI/models
+  • Network volume path: /runpod-volume/models
 ✅ Downloaded model sd_xl_base_1.0.safetensors
 ✅ Cloned custom nodes from Pseudotools/Pseudocomfy
-🧠 MODEL_PATH=/app/models
-🧩 CUSTOM_NODE_PATH=/app/custom_nodes
+🧩 Final model paths written to /workspace/ComfyUI/extra_model_paths.yaml
 Worker initialized and listening for jobs...
 ```
 
@@ -165,6 +226,8 @@ requests.post(
     json={"input": {"workflow": "Hugo", "prompt": "sunlit atrium"}}
 )
 ```
+
+**Note:** Replace `{COMFYUI_AUTH_TOKEN}` with your actual bearer token value. *(The dispatcher refers to this as `SERVERLESS_BEARER_TOKEN`)*
 
 This allows your local or cloud services to dispatch jobs directly to this worker.
 
