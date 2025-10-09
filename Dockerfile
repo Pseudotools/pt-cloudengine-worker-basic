@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir huggingface_hub gitpython
 # 3. Download core models from Hugging Face
 # Reference: https://huggingface.co/pseudotools/pseudocomfy-models
 # ─────────────────────────────────────────────
-RUN mkdir -p /app/models/checkpoints /app/models/controlnet /app/models/ipadapter /app/models/clip_vision
+RUN mkdir -p /workspace/ComfyUI/models/checkpoints /workspace/ComfyUI/models/controlnet /workspace/ComfyUI/models/ipadapter /workspace/ComfyUI/models/clip_vision
 
 RUN huggingface-cli download pseudotools/pseudocomfy-models \
     checkpoints/sd_xl_base_1.0.safetensors \
@@ -24,7 +24,7 @@ RUN huggingface-cli download pseudotools/pseudocomfy-models \
     controlnet/control-lora-depth-rank128.safetensors \
     ipadapter/ip-adapter-plus_sdxl_vit-h.safetensors \
     clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors \
-    --local-dir /app/models --local-dir-use-symlinks False
+    --local-dir /workspace/ComfyUI/models --local-dir-use-symlinks False
 
 # ─────────────────────────────────────────────
 # 4. Clone Pseudotools custom nodes
@@ -38,7 +38,7 @@ WORKDIR /app
 # ─────────────────────────────────────────────
 # 5. Environment variables
 # ─────────────────────────────────────────────
-ENV MODEL_PATH=/app/models \
+ENV MODEL_PATH=/workspace/ComfyUI/models \
     CUSTOM_NODE_PATH=/app/custom_nodes \
     HF_HUB_DISABLE_SYMLINKS_WARNING=1
 
