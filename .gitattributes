@@ -1,0 +1,19 @@
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# Force Unix line endings for shell scripts
+*.sh text eol=lf
+
+# Force Windows line endings for batch files
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Force Unix line endings for Dockerfile
+Dockerfile text eol=lf
+
+# Force Unix line endings for configuration files
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
