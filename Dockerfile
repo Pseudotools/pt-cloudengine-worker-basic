@@ -5,8 +5,9 @@
 FROM runpod/worker-comfyui:0.3.4-base
 
 # ─────────────────────────────────────────────
-# 2. Install dependencies
+# 2. Ensure git is available and install dependencies
 # ─────────────────────────────────────────────
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir huggingface_hub gitpython
 
 # ─────────────────────────────────────────────
@@ -15,13 +16,15 @@ RUN pip install --no-cache-dir huggingface_hub gitpython
 # ─────────────────────────────────────────────
 RUN mkdir -p /app/models/checkpoints /app/models/controlnet /app/models/ipadapter /app/models/clip_vision
 
-RUN huggingface-cli download pseudotools/pseudocomfy-models checkpoints/sd_xl_base_1.0.safetensors --local-dir /app/models/checkpoints
-RUN huggingface-cli download pseudotools/pseudocomfy-models checkpoints/sd_xl_refiner_1.0.safetensors --local-dir /app/models/checkpoints
-RUN huggingface-cli download pseudotools/pseudocomfy-models checkpoints/Juggernaut_X_RunDiffusion_Hyper.safetensors --local-dir /app/models/checkpoints
-RUN huggingface-cli download pseudotools/pseudocomfy-models checkpoints/realvisxlV50_v50LightningBakedvae.safetensors --local-dir /app/models/checkpoints
-RUN huggingface-cli download pseudotools/pseudocomfy-models controlnet/control-lora-depth-rank128.safetensors --local-dir /app/models/controlnet
-RUN huggingface-cli download pseudotools/pseudocomfy-models ipadapter/ip-adapter-plus_sdxl_vit-h.safetensors --local-dir /app/models/ipadapter
-RUN huggingface-cli download pseudotools/pseudocomfy-models clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors --local-dir /app/models/clip_vision
+RUN huggingface-cli download pseudotools/pseudocomfy-models \
+    checkpoints/sd_xl_base_1.0.safetensors \
+    checkpoints/sd_xl_refiner_1.0.safetensors \
+    checkpoints/Juggernaut_X_RunDiffusion_Hyper.safetensors \
+    checkpoints/realvisxlV50_v50LightningBakedvae.safetensors \
+    controlnet/control-lora-depth-rank128.safetensors \
+    ipadapter/ip-adapter-plus_sdxl_vit-h.safetensors \
+    clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors \
+    --local-dir /app/models --local-dir-use-symlinks False
 
 # ─────────────────────────────────────────────
 # 4. Clone Pseudotools custom nodes
@@ -38,5 +41,12 @@ WORKDIR /app
 ENV MODEL_PATH=/app/models \
     CUSTOM_NODE_PATH=/app/custom_nodes \
     HF_HUB_DISABLE_SYMLINKS_WARNING=1
+
+# ─────────────────────────────────────────────
+# 6. Metadata labels
+# ─────────────────────────────────────────────
+LABEL maintainer="pseudotools"
+LABEL description="Pseudotools ComfyUI worker with baked required custom nodes and commonly-used models"
+LABEL version="0.1.0"
 
 WORKDIR /app
