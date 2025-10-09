@@ -13,19 +13,19 @@ This worker provides a baseline ComfyUI runtime with:
 
 This worker automatically configures ComfyUI to recognize both baked-in and shared models.
 
-* Baked-in models live in `/workspace/ComfyUI/models` (downloaded during build).
+* Baked-in models live in `/comfyui/models` (downloaded during build).
 * Optional shared models can be mounted from a RunPod **network volume** at `/runpod-volume/models`.
-* On startup, the worker updates `/workspace/ComfyUI/extra_model_paths.yaml` to include all available paths.
+* On startup, the worker updates `/comfyui/extra_model_paths.yaml` to include all available paths.
 
 Example log output:
 
 ```
 🔧 Configuring ComfyUI model paths...
-  • Baked-in models:    /workspace/ComfyUI/models
+  • Baked-in models:    /comfyui/models
   • Network volume path: /runpod-volume/models
 ✅ Found network models at /runpod-volume/models
   + Adding /runpod-volume/models/checkpoints to extra_model_paths.yaml
-🧩 Final model paths written to /workspace/ComfyUI/extra_model_paths.yaml
+🧩 Final model paths written to /comfyui/extra_model_paths.yaml
 ```
 
 If no network volume is mounted, the worker continues using the baked-in models only.
@@ -180,7 +180,7 @@ Once deployment completes:
 ### 🧠 6. Model and Node Directories
 
 **Model paths are configured dynamically at startup:**
-- Baked-in models: `/workspace/ComfyUI/models/` (downloaded during build)
+- Baked-in models: `/comfyui/models/` (downloaded during build)
 - Network volume models: `/runpod-volume/models/` (if mounted)
 
 **Custom nodes are automatically available:**
@@ -199,11 +199,11 @@ After the worker starts, open the **Logs** tab in RunPod and confirm:
 
 ```
 🔧 Configuring ComfyUI model paths...
-  • Baked-in models:    /workspace/ComfyUI/models
+  • Baked-in models:    /comfyui/models
   • Network volume path: /runpod-volume/models
 ✅ Downloaded model sd_xl_base_1.0.safetensors
 ✅ Cloned custom nodes from Pseudotools/Pseudocomfy
-🧩 Final model paths written to /workspace/ComfyUI/extra_model_paths.yaml
+🧩 Final model paths written to /comfyui/extra_model_paths.yaml
 Worker initialized and listening for jobs...
 ```
 

@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir huggingface_hub gitpython
 # 3. Download core models from Hugging Face
 # Reference: https://huggingface.co/pseudotools/pseudocomfy-models
 # ─────────────────────────────────────────────
-RUN mkdir -p /workspace/ComfyUI/models/checkpoints /workspace/ComfyUI/models/controlnet /workspace/ComfyUI/models/ipadapter /workspace/ComfyUI/models/clip_vision
+RUN mkdir -p /comfyui/models/checkpoints /comfyui/models/controlnet /comfyui/models/ipadapter /comfyui/models/clip_vision
 
 RUN huggingface-cli download pseudotools/pseudocomfy-models \
     checkpoints/sd_xl_base_1.0.safetensors \
@@ -22,7 +22,7 @@ RUN huggingface-cli download pseudotools/pseudocomfy-models \
     controlnet/control-lora-depth-rank128.safetensors \
     ipadapter/ip-adapter-plus_sdxl_vit-h.safetensors \
     clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors \
-    --local-dir /workspace/ComfyUI/models --local-dir-use-symlinks False
+    --local-dir /comfyui/models --local-dir-use-symlinks False
 
 # ─────────────────────────────────────────────
 # 4. Clone Pseudotools custom nodes
@@ -40,7 +40,7 @@ WORKDIR /app
 RUN huggingface-cli download pseudotools/pseudocomfy-models \
     checkpoints/Juggernaut_X_RunDiffusion_Hyper.safetensors \
     checkpoints/realvisxlV50_v50LightningBakedvae.safetensors \
-    --local-dir /workspace/ComfyUI/models --local-dir-use-symlinks False
+    --local-dir /comfyui/models --local-dir-use-symlinks False
 
 # ─────────────────────────────────────────────
 # 6. Environment variables
@@ -51,9 +51,9 @@ ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
 # Diagnostic: verify models and paths
 # ─────────────────────────────────────────────
 RUN echo "=== MODEL DIRECTORY STRUCTURE ===" && \
-    ls -Rlh /workspace/ComfyUI/models || true && \
+    ls -Rlh /comfyui/models || true && \
     echo "=== EXTRA MODEL PATHS CONFIG ===" && \
-    cat /workspace/ComfyUI/extra_model_paths.yaml || true
+    cat /comfyui/extra_model_paths.yaml || true
 
 # ─────────────────────────────────────────────
 # 7. Metadata labels

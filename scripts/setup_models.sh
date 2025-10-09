@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-WORKSPACE="/workspace/ComfyUI"
+WORKSPACE="/comfyui"
 EXTRA_PATHS_FILE="${WORKSPACE}/extra_model_paths.yaml"
 BAKED_MODELS="${WORKSPACE}/models"
 NETWORK_VOLUME_PATH="${NETWORK_VOLUME_PATH:-/runpod-volume}"
@@ -57,10 +57,10 @@ echo "────────────────────────�
 
 # Runtime diagnostics
 echo "🧩 Model paths available at runtime:"
-find /workspace/ComfyUI/models -maxdepth 2 -type f -name "*.safetensors" || echo "❌ No models found"
-if [ -f /workspace/ComfyUI/extra_model_paths.yaml ]; then
+find /comfyui/models -maxdepth 2 -type f -name "*.safetensors" || echo "❌ No models found"
+if [ -f /comfyui/extra_model_paths.yaml ]; then
   echo "🔧 extra_model_paths.yaml:"
-  cat /workspace/ComfyUI/extra_model_paths.yaml
+  cat /comfyui/extra_model_paths.yaml
 else
   echo "⚠️ No extra_model_paths.yaml found"
 fi
