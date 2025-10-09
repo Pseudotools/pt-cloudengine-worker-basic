@@ -2,7 +2,7 @@
 # 1. Base image: RunPod ComfyUI worker
 # Reference: https://github.com/runpod-workers/worker-comfyui
 # ─────────────────────────────────────────────
-FROM runpod/worker-comfyui:0.3.4-base
+FROM runpod/worker-comfyui:5.5.0-base
 
 # ─────────────────────────────────────────────
 # 2. Ensure git is available and install dependencies
