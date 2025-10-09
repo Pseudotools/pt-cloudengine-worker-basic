@@ -48,6 +48,14 @@ RUN huggingface-cli download pseudotools/pseudocomfy-models \
 ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
 
 # ─────────────────────────────────────────────
+# Diagnostic: verify models and paths
+# ─────────────────────────────────────────────
+RUN echo "=== MODEL DIRECTORY STRUCTURE ===" && \
+    ls -Rlh /workspace/ComfyUI/models || true && \
+    echo "=== EXTRA MODEL PATHS CONFIG ===" && \
+    cat /workspace/ComfyUI/extra_model_paths.yaml || true
+
+# ─────────────────────────────────────────────
 # 7. Metadata labels
 # ─────────────────────────────────────────────
 LABEL maintainer="pseudotools"

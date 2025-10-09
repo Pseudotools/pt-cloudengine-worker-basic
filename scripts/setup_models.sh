@@ -55,5 +55,15 @@ echo "🧩 Final model paths written to ${EXTRA_PATHS_FILE}:"
 cat "${EXTRA_PATHS_FILE}"
 echo "────────────────────────────────────────────"
 
+# Runtime diagnostics
+echo "🧩 Model paths available at runtime:"
+find /workspace/ComfyUI/models -maxdepth 2 -type f -name "*.safetensors" || echo "❌ No models found"
+if [ -f /workspace/ComfyUI/extra_model_paths.yaml ]; then
+  echo "🔧 extra_model_paths.yaml:"
+  cat /workspace/ComfyUI/extra_model_paths.yaml
+else
+  echo "⚠️ No extra_model_paths.yaml found"
+fi
+
 # Start the worker normally
 exec /start.sh
