@@ -7,11 +7,13 @@ BAKED_MODELS="${WORKSPACE}/models"
 NETWORK_VOLUME_PATH="${NETWORK_VOLUME_PATH:-/runpod-volume}"
 NETWORK_MODELS="${NETWORK_VOLUME_PATH}/models"
 
-echo "────────────────────────────────────────────"
+echo "================================================"
+echo "🚀 PSEUDOTOOLS COMFYUI WORKER STARTUP"
+echo "================================================"
 echo "🔧 Configuring ComfyUI model paths..."
 echo "  • Baked-in models:    ${BAKED_MODELS}"
 echo "  • Network volume path: ${NETWORK_MODELS}"
-echo "────────────────────────────────────────────"
+echo "================================================"
 
 mkdir -p "${BAKED_MODELS}"
 
@@ -64,6 +66,11 @@ if [ -f /comfyui/extra_model_paths.yaml ]; then
 else
   echo "⚠️ No extra_model_paths.yaml found"
 fi
+
+echo "================================================"
+echo "✅ PSEUDOTOOLS WORKER CONFIGURATION COMPLETE"
+echo "🚀 Starting ComfyUI worker..."
+echo "================================================"
 
 # Start the worker normally
 exec /start.sh

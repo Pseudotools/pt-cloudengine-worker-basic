@@ -79,6 +79,9 @@ Under **Environment Variables**, add the following:
 | `COMFYUI_AUTH_TOKEN`  | `pseudotools-secret-token` | Bearer token required to authenticate API requests to this worker. Clients must include it in the `Authorization` header when submitting jobs. *(Note: The dispatcher refers to this as `SERVERLESS_BEARER_TOKEN`)* | ✅       |
 | `NETWORK_VOLUME_PATH` | `/runpod-volume`           | Optional path for network-mounted storage. Used if attached to this endpoint.                                                                  | ❌       |
 | `LOG_LEVEL`           | `info`                     | Logging verbosity for the worker.                                                                                                              | ❌       |
+| `BUCKET_ENDPOINT_URL` | `https://my-bucket.s3.us-east-1.amazonaws.com` | Full endpoint URL of your S3 bucket for direct image uploads. If set, images will be uploaded to S3 instead of returned as base64. | ❌       |
+| `BUCKET_ACCESS_KEY_ID` | `AKIAIOSFODNN7EXAMPLE` | AWS access key ID for S3 upload permissions. Required if BUCKET_ENDPOINT_URL is set. *(Note: The dispatcher refers to this as `AWS_ACCESS_KEY_ID`)* | ✅       |
+| `BUCKET_SECRET_ACCESS_KEY` | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` | AWS secret access key for S3 upload permissions. Required if BUCKET_ENDPOINT_URL is set. *(Note: The dispatcher refers to this as `AWS_SECRET_ACCESS_KEY`)* | ✅       |
 
 🟡 **Notes:**
 
@@ -110,6 +113,80 @@ You can monitor progress in **Build Logs**.
 * Model downloads complete without errors.
 * Custom nodes install successfully.
 * The worker logs show it’s “ready” or listening for RunPod jobs.
+
+---
+
+### ⚙️ **Configuration**
+
+This document outlines the environment variables available for configuring the worker-comfyui.
+
+#### General Configuration
+
+| Environment Variable | Description | Default |
+| -------------------- | ----------- | ------- |
+| `REFRESH_WORKER` | When true, the worker pod will stop after each completed job to ensure a clean state for the next job. See the RunPod documentation for details. | `false` |
+| `SERVE_API_LOCALLY` | When true, enables a local HTTP server simulating the RunPod environment for development and testing. See the Development Guide for more details. | `false` |
+| `COMFY_ORG_API_KEY` | Comfy.org API key to enable ComfyUI API Nodes. If set, it is sent with each workflow; clients can override per request via input.api_key_comfy_org. | – |
+
+#### Logging Configuration
+
+| Environment Variable | Description | Default |
+| -------------------- | ----------- | ------- |
+| `COMFY_LOG_LEVEL` | Controls ComfyUI's internal logging verbosity. Options: DEBUG, INFO, WARNING, ERROR, CRITICAL. Use DEBUG for troubleshooting, INFO for production. | `DEBUG` |
+
+#### Debugging Configuration
+
+| Environment Variable | Description | Default |
+| -------------------- | ----------- | ------- |
+| `WEBSOCKET_RECONNECT_ATTEMPTS` | Number of websocket reconnection attempts when connection drops during job execution. | `5` |
+| `WEBSOCKET_RECONNECT_DELAY_S` | Delay in seconds between websocket reconnection attempts. | `3` |
+| `WEBSOCKET_TRACE` | Enable low-level websocket frame tracing for protocol debugging. Set to true only when diagnosing connection issues. | `false` |
+
+> [!TIP]
+> For troubleshooting: Set `COMFY_LOG_LEVEL=DEBUG` to get detailed logs when ComfyUI crashes or behaves unexpectedly. This helps identify the exact point of failure in your workflows.
+
+#### AWS S3 Upload Configuration
+
+Configure these variables only if you want the worker to upload generated images directly to an AWS S3 bucket. If these are not set, images will be returned as base64-encoded strings in the API response.
+
+**Prerequisites:**
+- An AWS S3 bucket in your desired region.
+- An AWS IAM user with programmatic access (Access Key ID and Secret Access Key).
+- Permissions attached to the IAM user allowing `s3:PutObject` (and potentially `s3:PutObjectAcl` if you need specific ACLs) on the target bucket.
+
+| Environment Variable | Description | Example |
+| -------------------- | ----------- | ------- |
+| `BUCKET_ENDPOINT_URL` | The full endpoint URL of your S3 bucket. Must be set to enable S3 upload. | `https://<your-bucket-name>.s3.<aws-region>.amazonaws.com` |
+| `BUCKET_ACCESS_KEY_ID` | Your AWS access key ID associated with the IAM user that has write permissions to the bucket. Required if BUCKET_ENDPOINT_URL is set. | `AKIAIOSFODNN7EXAMPLE` |
+| `BUCKET_SECRET_ACCESS_KEY` | Your AWS secret access key associated with the IAM user. Required if BUCKET_ENDPOINT_URL is set. | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
+
+> **Note:** Upload uses the runpod Python library helper `rp_upload.upload_image`, which handles creating a unique path within the bucket based on the job_id.
+
+**Example S3 Response**
+
+If the S3 environment variables (`BUCKET_ENDPOINT_URL`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`) are correctly configured, a successful job response will look similar to this:
+
+```json
+{
+  "id": "sync-uuid-string",
+  "status": "COMPLETED",
+  "output": {
+    "images": [
+      {
+        "filename": "ComfyUI_00001_.png",
+        "type": "s3_url",
+        "data": "https://your-bucket-name.s3.your-region.amazonaws.com/sync-uuid-string/ComfyUI_00001_.png"
+      }
+      // Additional images generated by the workflow would appear here
+    ]
+    // The "errors" key might be present here if non-fatal issues occurred
+  },
+  "delayTime": 123,
+  "executionTime": 4567
+}
+```
+
+The `data` field contains the presigned URL to the uploaded image file in your S3 bucket. The path usually includes the job ID.
 
 ---
 
@@ -245,6 +322,71 @@ This allows your local or cloud services to dispatch jobs directly to this worke
   * `pt-cloudengine-worker-comfyui-materials` — material inference builds
 * **Persistence:**
   Mount `/runpod-volume/models` or `/runpod-volume/custom_nodes` to retain files between runs.
+
+---
+
+## ⚙️ **Bare-Bones Setup Guide**
+
+This is the *minimal "how-to"* for deploying a Pseudotools-style ComfyUI worker on RunPod.
+
+### 1. Create a GitHub Repository
+
+1. Create a new repo, e.g. `pt-cloudengine-worker-basic`.
+2. Add:
+    - `Dockerfile`
+    - `scripts/setup_models.sh`
+    - `.gitignore`
+    - `README.md`
+
+### 2. Dockerfile Overview
+
+The Dockerfile builds a ComfyUI worker that:
+- Uses the official RunPod ComfyUI base image
+- Installs git and Python dependencies (huggingface_hub, gitpython)
+- Downloads 7 core models from Hugging Face to `/comfyui/models`
+- Clones Pseudotools custom nodes to `/app/custom_nodes`
+- Sets up dynamic model path configuration via startup script
+- Configures ComfyUI to find both baked-in and network-mounted models
+
+### 3. Deploy on RunPod
+
+1. Go to **RunPod Console → Serverless → New Endpoint**
+2. Fill out:
+    - **Repository URL** → your GitHub repo
+    - **Dockerfile Path** → `Dockerfile`
+    - **Container Start Command** → leave blank (ENTRYPOINT handles it)
+    - **Expose HTTP Ports** → leave blank (serverless workers don't expose ports)
+
+### 4. Add Environment Variables
+
+| Variable | Sample Value | Purpose |
+| --- | --- | --- |
+| `COMFYUI_AUTH_TOKEN` | `<SERVERLESS_BEARER_TOKEN>` | API token for client requests |
+| `NETWORK_VOLUME_PATH` | `/runpod-volume` | Optional path for network-mounted storage |
+| `LOG_LEVEL` | `info` | Logging level |
+| `BUCKET_ENDPOINT_URL` | `https://my-bucket.s3.us-east-1.amazonaws.com` | S3 endpoint for image uploads |
+| `BUCKET_ACCESS_KEY_ID` | `<your_aws_access_key_id>` | AWS access key for S3 |
+| `BUCKET_SECRET_ACCESS_KEY` | `<your_aws_secret_access_key>` | AWS secret key for S3 |
+
+📘 **Tip:** Mark sensitive ones as secrets (click the 🔑 icon in RunPod).
+
+### 5. Success Criteria
+
+✅ Logs show:
+
+```
+🔧 Configuring ComfyUI model paths...
+🧩 Model paths available at runtime:
+/comfyui/models/checkpoints/sd_xl_base_1.0.safetensors
+/comfyui/models/checkpoints/sd_xl_refiner_1.0.safetensors
+/comfyui/models/checkpoints/Juggernaut_X_RunDiffusion_Hyper.safetensors
+/comfyui/models/checkpoints/realvisxlV50_v50LightningBakedvae.safetensors
+/comfyui/models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors
+/comfyui/models/controlnet/control-lora-depth-rank128.safetensors
+/comfyui/models/ipadapter/ip-adapter-plus_sdxl_vit-h.safetensors
+```
+
+✅ Worker status shows "Ready" and is listening for jobs.
 
 ---
 
