@@ -38,6 +38,87 @@ If no network volume is mounted, the worker continues using the baked-in models 
 
 
 
+## 🧩 TODO: Custom Node Update Strategy
+
+**Context:**
+The worker image currently clones the **Pseudocomfy** custom nodes during Docker build time:
+
+```dockerfile
+RUN git clone https://github.com/Pseudotools/Pseudocomfy /comfyui/custom_nodes/Pseudocomfy
+WORKDIR /comfyui/custom_nodes/Pseudocomfy
+RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /app
+```
+
+This means:
+
+* The custom nodes are **frozen at the time of build**.
+* Any updates to the `Pseudocomfy` repository **require a new image rebuild** to take effect.
+
+---
+
+### ✅ TODO: Decide on Update Policy
+
+#### **Option 1 — Keep current behavior (Recommended for production)**
+
+* Leave the Dockerfile as is.
+* Rebuild the image whenever `Pseudocomfy` changes (`git commit && push` to trigger a new RunPod build).
+* Pros: fully reproducible and stable.
+* Cons: manual updates required.
+
+#### **Option 2 — Add optional runtime auto-update (Recommended for dev/testing)**
+
+Add the following snippet near the top of `setup_models.sh`:
+
+```bash
+if [ "${AUTO_UPDATE_NODES}" = "true" ]; then
+  echo "🔄 Auto-updating Pseudocomfy custom nodes..."
+  git -C /comfyui/custom_nodes/Pseudocomfy pull || true
+  pip install -r /comfyui/custom_nodes/Pseudocomfy/requirements.txt || true
+fi
+```
+
+Then, define an environment variable in RunPod:
+
+```
+AUTO_UPDATE_NODES=true
+```
+
+**Result:**
+
+* In development, workers will pull the latest Pseudocomfy code each time they start.
+* In production, omit the variable to ensure version lock.
+
+---
+
+### ⚙️ Optional Future Improvement
+
+To improve reproducibility:
+
+* Consider pinning the clone to a specific commit or tag:
+
+  ```dockerfile
+  RUN git clone --branch main https://github.com/Pseudotools/Pseudocomfy /comfyui/custom_nodes/Pseudocomfy
+  WORKDIR /comfyui/custom_nodes/Pseudocomfy
+  RUN git checkout <commit-hash>
+  ```
+
+This locks the worker image to a known working version of the custom nodes and can be updated manually when desired.
+
+---
+
+🧠 **Summary:**
+
+| Use Case                  | Behavior         | Recommended Setting      |
+| ------------------------- | ---------------- | ------------------------ |
+| Production                | Fixed version    | Rebuild image            |
+| Development / Testing     | Auto-pull latest | `AUTO_UPDATE_NODES=true` |
+| Long-term reproducibility | Pin commit       | `git checkout <hash>`    |
+
+
+
+
+
 ## 🚀 Deployment on RunPod
 
 This repository defines a **custom RunPod Serverless Worker** for [ComfyUI](https://github.com/comfyanonymous/ComfyUI), configured with Pseudotools’ core models and custom nodes.
