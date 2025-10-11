@@ -261,7 +261,7 @@ Once deployment completes:
 - Network volume models: `/runpod-volume/models/` (if mounted)
 
 **Custom nodes are automatically available:**
-- Custom nodes: `/app/custom_nodes/` (cloned during build)
+- Custom nodes: `/comfyui/custom_nodes/Pseudocomfy/` (cloned during build)
 
 The startup script automatically updates ComfyUI's configuration to include all available model directories.
 
@@ -344,7 +344,7 @@ The Dockerfile builds a ComfyUI worker that:
 - Uses the official RunPod ComfyUI base image
 - Installs git and Python dependencies (huggingface_hub, gitpython)
 - Downloads 7 core models from Hugging Face to `/comfyui/models`
-- Clones Pseudotools custom nodes to `/app/custom_nodes`
+- Clones Pseudotools custom nodes to `/comfyui/custom_nodes/Pseudocomfy`
 - Sets up dynamic model path configuration via startup script
 - Configures ComfyUI to find both baked-in and network-mounted models
 

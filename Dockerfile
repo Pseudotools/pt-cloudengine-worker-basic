@@ -28,8 +28,8 @@ RUN huggingface-cli download pseudotools/pseudocomfy-models \
 # 4. Clone Pseudotools custom nodes
 # Reference: https://github.com/Pseudotools/Pseudocomfy
 # ─────────────────────────────────────────────
-RUN git clone https://github.com/Pseudotools/Pseudocomfy /app/custom_nodes
-WORKDIR /app/custom_nodes
+RUN git clone https://github.com/Pseudotools/Pseudocomfy /comfyui/custom_nodes/Pseudocomfy
+WORKDIR /comfyui/custom_nodes/Pseudocomfy
 RUN pip install --no-cache-dir -r requirements.txt
 WORKDIR /app
 
@@ -52,6 +52,8 @@ ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
 # ─────────────────────────────────────────────
 RUN echo "=== MODEL DIRECTORY STRUCTURE ===" && \
     ls -Rlh /comfyui/models || true && \
+    echo "=== CUSTOM NODES DIRECTORY STRUCTURE ===" && \
+    ls -Rlh /comfyui/custom_nodes || true && \
     echo "=== EXTRA MODEL PATHS CONFIG ===" && \
     cat /comfyui/extra_model_paths.yaml || true
 
