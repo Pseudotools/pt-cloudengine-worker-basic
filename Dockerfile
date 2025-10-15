@@ -53,13 +53,6 @@ ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
 COPY handler.py /app/handler.py
 
 # ─────────────────────────────────────────────
-# 6.6. Build-time diagnostics: verify handler and deps
-# ─────────────────────────────────────────────
-RUN echo "=== Handler and dependency diagnostics ===" && \
-    ls -l /app/handler.py && \
-    python -c "import sys, pkgutil; print('Python:', sys.version); \nmods=['requests','psutil','pynvml']; \n[print(m, 'available:', pkgutil.find_loader(m) is not None) for m in mods]"
-
-# ─────────────────────────────────────────────
 # Diagnostic: verify models and paths
 # ─────────────────────────────────────────────
 RUN echo "=== MODEL DIRECTORY STRUCTURE ===" && \
