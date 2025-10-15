@@ -11,14 +11,9 @@ This worker provides a baseline ComfyUI runtime with:
 
 ----
 
-## Execution Metadata (Location + Hardware) – Design Notes
+## Execution Metadata (Location + Hardware)
 
 Goal: return machine location and hardware information alongside job results to support energy-usage analysis.
-
-### What we tried
-
-- Considered directly modifying upstream worker return path (e.g., `worker-comfyui/handler.py` near the final result) — fragile because upstream can change; we do not control the base image internals. Reference: [runpod-workers/worker-comfyui handler.py L792](https://github.com/runpod-workers/worker-comfyui/blob/main/handler.py#L792).
-- Attempted to replace the base image startup and run our own serverless handler. Result: images disappeared because the base image’s orchestration (ComfyUI execution, image upload) is handled by its own startup and handler system (`/start.sh`). Overriding that bypassed the image-generation/upload flow.
 
 ### Key learnings
 
@@ -38,6 +33,24 @@ Goal: return machine location and hardware information alongside job results to 
 3) Inject metadata as a top-level `execution_metadata` under `result["output"]`, without changing the `images` array structure.
 
 4) Graceful fallbacks: if any probe fails, include partial data; do not fail the job.
+
+### Implementation
+
+This repository implements the wrapper described below. The image now:
+
+- Installs `requests`, `psutil`, and `nvidia-ml-py3` in the `Dockerfile`.
+- Copies our wrapper `handler.py` into `/app/handler.py`.
+- Keeps the base startup flow intact via `scripts/setup_models.sh` which ends with `exec /start.sh`.
+- Avoids modifying upstream internals directly; instead we import the base `rp_handler` and augment its returned result. This approach is robust to upstream changes and preserves the ComfyUI execution/upload flow driven by `/start.sh`.
+
+Result: each job response is augmented with `worker_metadata` containing location, GPU, and system information without altering the `images` structure.
+
+#### How our handler is invoked
+
+- The base image startup (`/start.sh`) boots the RunPod serverless runtime, which imports a module named `handler` from `/app` and calls its `handler(job)` function.
+- We copy our `handler.py` into `/app/handler.py` during the image build, so the runtime uses our module.
+- Inside our `handler.py`, we import and call `rp_handler.handler` (provided by the base image), then inject `execution_metadata` into the returned result.
+- If our `handler.py` were absent, the base image’s built-in `rp_handler` would be used directly.
 
 ### Example wrapper (illustrative)
 
@@ -128,6 +141,51 @@ Notes:
 ### API choice
 
 - Geolocation via `https://ifconfig.co/json` was selected for simplicity and reliability (no CAPTCHA, fast JSON endpoint).
+
+### Example response shape (augmented)
+
+```json
+{
+  "id": "sync-uuid-string",
+  "status": "COMPLETED",
+  "output": {
+    "images": [
+      {
+        "filename": "ComfyUI_00001_.png",
+        "type": "base64",
+        "data": "..."
+      }
+    ],
+    "worker_metadata": {
+      "location": {
+        "ip": "203.0.113.1",
+        "city": "Ashburn",
+        "region": "Virginia",
+        "country": "United States",
+        "latitude": 39.0438,
+        "longitude": -77.4874
+      },
+      "hardware": {
+        "gpu": {
+          "name": "NVIDIA L4",
+          "power_draw_watts": 58.2,
+          "utilization_percent": 72,
+          "memory_used_mb": 4321,
+          "memory_total_mb": 24564,
+          "temperature_celsius": 63
+        },
+        "cpu": {
+          "model": "Intel(R) Xeon(R) CPU",
+          "cores": 8
+        },
+        "memory_total_gb": 64
+      }
+    }
+  },
+  "delayTime": 123,
+  "executionTime": 4567
+}
+```
 
 ---
 
@@ -467,11 +525,12 @@ This is the *minimal "how-to"* for deploying a Pseudotools-style ComfyUI worker 
 
 The Dockerfile builds a ComfyUI worker that:
 - Uses the official RunPod ComfyUI base image
-- Installs git and Python dependencies (huggingface_hub, gitpython)
+- Installs git and Python dependencies (huggingface_hub, gitpython, requests, psutil, nvidia-ml-py3)
 - Downloads 7 core models from Hugging Face to `/comfyui/models`
 - Clones Pseudotools custom nodes to `/comfyui/custom_nodes/Pseudocomfy`
 - Sets up dynamic model path configuration via startup script
 - Configures ComfyUI to find both baked-in and network-mounted models
+ - Copies a wrapper `handler.py` that augments responses with `worker_metadata`
 
 ### 3. Deploy on RunPod
 

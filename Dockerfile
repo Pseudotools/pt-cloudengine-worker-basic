@@ -8,7 +8,7 @@ FROM runpod/worker-comfyui:5.5.0-base
 # 2. Ensure git is available and install dependencies
 # ─────────────────────────────────────────────
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir huggingface_hub gitpython
+RUN pip install --no-cache-dir huggingface_hub gitpython requests psutil nvidia-ml-py3
 
 # ─────────────────────────────────────────────
 # 3. Download core models from Hugging Face
@@ -46,6 +46,23 @@ RUN huggingface-cli download pseudotools/pseudocomfy-models \
 # 6. Environment variables
 # ─────────────────────────────────────────────
 ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
+
+# ─────────────────────────────────────────────
+# 6.5. Copy wrapper handler that augments base result with execution metadata
+# ─────────────────────────────────────────────
+COPY handler.py /app/handler.py
+
+# ─────────────────────────────────────────────
+# 6.6. Build-time diagnostics: verify handler and deps
+# ─────────────────────────────────────────────
+RUN echo "=== Handler and dependency diagnostics ===" && \
+    ls -l /app/handler.py && \
+    python - <<'PY' \
+import sys, pkgutil
+print('Python:', sys.version)
+for mod in ['requests','psutil','pynvml']:
+    print(mod + ' available:', pkgutil.find_loader(mod) is not None)
+PY
 
 # ─────────────────────────────────────────────
 # Diagnostic: verify models and paths
