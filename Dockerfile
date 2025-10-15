@@ -53,6 +53,8 @@ ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY src/handler.py /app/handler.py
+COPY src/start_custom.py /app/start_custom.py
+RUN chmod +x /app/start_custom.py
 
 # ─────────────────────────────────────────────
 # Diagnostic: verify models and paths
