@@ -57,12 +57,7 @@ COPY handler.py /app/handler.py
 # ─────────────────────────────────────────────
 RUN echo "=== Handler and dependency diagnostics ===" && \
     ls -l /app/handler.py && \
-    python - <<'PY' \
-import sys, pkgutil
-print('Python:', sys.version)
-for mod in ['requests','psutil','pynvml']:
-    print(mod + ' available:', pkgutil.find_loader(mod) is not None)
-PY
+    python -c "import sys, pkgutil; print('Python:', sys.version); \nmods=['requests','psutil','pynvml']; \n[print(m, 'available:', pkgutil.find_loader(m) is not None) for m in mods]"
 
 # ─────────────────────────────────────────────
 # Diagnostic: verify models and paths
