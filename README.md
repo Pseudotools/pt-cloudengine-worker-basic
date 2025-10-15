@@ -9,6 +9,128 @@ This worker provides a baseline ComfyUI runtime with:
 - Automatically cloned [Pseudotools "Pseudocomfy" Custom Nodes](https://github.com/Pseudotools/Pseudocomfy)
 - Configurable persistent storage at `/runpod-volume/models` for additional models
 
+---
+
+## Execution Metadata (Location + Hardware) – Design Notes
+
+Goal: return machine location and hardware information alongside job results to support energy-usage analysis.
+
+### What we tried
+
+- Considered directly modifying upstream worker return path (e.g., `worker-comfyui/handler.py` near the final result) — fragile because upstream can change; we do not control the base image internals. Reference: [runpod-workers/worker-comfyui handler.py L792](https://github.com/runpod-workers/worker-comfyui/blob/main/handler.py#L792).
+- Attempted to replace the base image startup and run our own serverless handler. Result: images disappeared because the base image’s orchestration (ComfyUI execution, image upload) is handled by its own startup and handler system (`/start.sh`). Overriding that bypassed the image-generation/upload flow.
+
+### Key learnings
+
+- The base image’s startup (`/start.sh`) drives ComfyUI execution and the result packaging (including S3 upload). Replacing it with a standalone serverless start means the ComfyUI pipeline never runs, so no `images` are returned.
+- A robust approach is to keep the upstream handler in place and only augment its final response.
+- Avoid depending on environment variables for location; use a lightweight IP lookup and local GPU/system introspection instead.
+
+### Robust approach (recommended)
+
+1) Keep the base handler unchanged; add a small wrapper that imports the base handler and merges metadata into the response.
+
+2) Collect metadata:
+   - Geolocation: `https://ifconfig.co/json` (no key, fast). Cache the result once per pod to avoid repeated calls.
+   - GPU: `pynvml` (NVIDIA Management Library) to capture name, power (W), utilization, memory, temperature.
+   - System: `psutil` for CPU model/cores and total RAM.
+
+3) Inject metadata as a top-level `execution_metadata` under `result["output"]`, without changing the `images` array structure.
+
+4) Graceful fallbacks: if any probe fails, include partial data; do not fail the job.
+
+### Example wrapper (illustrative)
+
+```python
+# /app/handler.py (our file copied into the image)
+import sys
+import requests, psutil, pynvml
+
+def _get_geo_cached(_cache={}):
+    if "geo" in _cache:
+        return _cache["geo"]
+    try:
+        r = requests.get("https://ifconfig.co/json", timeout=5)
+        r.raise_for_status()
+        data = r.json()
+        _cache["geo"] = {
+            "ip": data.get("ip"),
+            "city": data.get("city"),
+            "region": data.get("region"),
+            "country": data.get("country"),
+            "latitude": data.get("latitude"),
+            "longitude": data.get("longitude"),
+        }
+    except Exception:
+        _cache["geo"] = None
+    return _cache["geo"]
+
+def _gpu_info():
+    try:
+        pynvml.nvmlInit()
+        h = pynvml.nvmlDeviceGetHandleByIndex(0)
+        util = pynvml.nvmlDeviceGetUtilizationRates(h)
+        mem = pynvml.nvmlDeviceGetMemoryInfo(h)
+        return {
+            "name": pynvml.nvmlDeviceGetName(h).decode("utf-8"),
+            "power_draw_watts": pynvml.nvmlDeviceGetPowerUsage(h) / 1000.0,
+            "utilization_percent": util.gpu,
+            "memory_used_mb": mem.used // (1024 * 1024),
+            "memory_total_mb": mem.total // (1024 * 1024),
+            "temperature_celsius": pynvml.nvmlDeviceGetTemperature(h, pynvml.NVML_TEMPERATURE_GPU),
+        }
+    except Exception:
+        return None
+
+def _system_info():
+    cpu_model = "Unknown"
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if line.startswith("model name"):
+                    cpu_model = line.split(":", 1)[1].strip()
+                    break
+    except Exception:
+        pass
+    return {
+        "cpu": {"model": cpu_model, "cores": psutil.cpu_count(logical=False) or 0},
+        "memory_total_gb": (psutil.virtual_memory().total // (1024 * 1024 * 1024)),
+    }
+
+def _collect_metadata():
+    return {
+        "location": _get_geo_cached(),
+        "hardware": {"gpu": _gpu_info(), **_system_info()},
+    }
+
+def handler(job):
+    # Import base handler from the image and call it
+    sys.path.append("/app")
+    from rp_handler import handler as base_handler
+    result = base_handler(job)
+
+    # Attach metadata without changing images structure
+    meta = _collect_metadata()
+    if isinstance(result, dict):
+        if isinstance(result.get("output"), dict):
+            result["output"]["execution_metadata"] = meta
+        else:
+            result["execution_metadata"] = meta
+    else:
+        result = {"output": result, "execution_metadata": meta}
+    return result
+```
+
+Notes:
+- Do not replace the base startup (`/start.sh`). Let the image orchestrate ComfyUI and uploads; only augment the final response.
+- The snippet is illustrative; integrate and test inside your image build context.
+
+### API choice
+
+- Geolocation via `https://ifconfig.co/json` was selected for simplicity and reliability (no CAPTCHA, fast JSON endpoint).
+
+---
+
 ## Model Path Configuration
 
 This worker automatically configures ComfyUI to recognize both baked-in and shared models.
@@ -36,84 +158,6 @@ If no network volume is mounted, the worker continues using the baked-in models 
 - [GitHub Integration Setup](https://docs.runpod.io/serverless/workers/github-integration)
 - [Hugging Face Model Repo](https://huggingface.co/pseudotools/pseudocomfy-models)
 
-
-
-## 🧩 TODO: Custom Node Update Strategy
-
-**Context:**
-The worker image currently clones the **Pseudocomfy** custom nodes during Docker build time:
-
-```dockerfile
-RUN git clone https://github.com/Pseudotools/Pseudocomfy /comfyui/custom_nodes/Pseudocomfy
-WORKDIR /comfyui/custom_nodes/Pseudocomfy
-RUN pip install --no-cache-dir -r requirements.txt
-WORKDIR /app
-```
-
-This means:
-
-* The custom nodes are **frozen at the time of build**.
-* Any updates to the `Pseudocomfy` repository **require a new image rebuild** to take effect.
-
----
-
-### ✅ TODO: Decide on Update Policy
-
-#### **Option 1 — Keep current behavior (Recommended for production)**
-
-* Leave the Dockerfile as is.
-* Rebuild the image whenever `Pseudocomfy` changes (`git commit && push` to trigger a new RunPod build).
-* Pros: fully reproducible and stable.
-* Cons: manual updates required.
-
-#### **Option 2 — Add optional runtime auto-update (Recommended for dev/testing)**
-
-Add the following snippet near the top of `setup_models.sh`:
-
-```bash
-if [ "${AUTO_UPDATE_NODES}" = "true" ]; then
-  echo "🔄 Auto-updating Pseudocomfy custom nodes..."
-  git -C /comfyui/custom_nodes/Pseudocomfy pull || true
-  pip install -r /comfyui/custom_nodes/Pseudocomfy/requirements.txt || true
-fi
-```
-
-Then, define an environment variable in RunPod:
-
-```
-AUTO_UPDATE_NODES=true
-```
-
-**Result:**
-
-* In development, workers will pull the latest Pseudocomfy code each time they start.
-* In production, omit the variable to ensure version lock.
-
----
-
-### ⚙️ Optional Future Improvement
-
-To improve reproducibility:
-
-* Consider pinning the clone to a specific commit or tag:
-
-  ```dockerfile
-  RUN git clone --branch main https://github.com/Pseudotools/Pseudocomfy /comfyui/custom_nodes/Pseudocomfy
-  WORKDIR /comfyui/custom_nodes/Pseudocomfy
-  RUN git checkout <commit-hash>
-  ```
-
-This locks the worker image to a known working version of the custom nodes and can be updated manually when desired.
-
----
-
-🧠 **Summary:**
-
-| Use Case                  | Behavior         | Recommended Setting      |
-| ------------------------- | ---------------- | ------------------------ |
-| Production                | Fixed version    | Rebuild image            |
-| Development / Testing     | Auto-pull latest | `AUTO_UPDATE_NODES=true` |
-| Long-term reproducibility | Pin commit       | `git checkout <hash>`    |
 
 
 
