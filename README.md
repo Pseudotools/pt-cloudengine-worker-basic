@@ -9,7 +9,7 @@ This worker provides a baseline ComfyUI runtime with:
 - Automatically cloned [Pseudotools "Pseudocomfy" Custom Nodes](https://github.com/Pseudotools/Pseudocomfy)
 - Configurable persistent storage at `/runpod-volume/models` for additional models
 
----
+----
 
 ## Execution Metadata (Location + Hardware) – Design Notes
 
