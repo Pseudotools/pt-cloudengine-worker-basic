@@ -69,17 +69,8 @@ fi
 
 echo "================================================"
 echo "✅ PSEUDOTOOLS WORKER CONFIGURATION COMPLETE"
-echo "🚀 Starting ComfyUI worker with custom handler..."
+echo "🚀 Starting ComfyUI worker..."
 echo "================================================"
 
-# Verify our custom handler exists
-if [ -f "/app/handler.py" ]; then
-    echo "✅ Custom handler found at /app/handler.py"
-    echo "🔧 Custom handler will add execution metadata to responses"
-    echo "🚀 Starting custom handler system..."
-    exec /app/start_custom.py
-else
-    echo "❌ Custom handler not found at /app/handler.py"
-    echo "🚀 Starting base image handler..."
-    exec /start.sh
-fi
+# Start the worker normally
+exec /start.sh
