@@ -48,6 +48,13 @@ RUN huggingface-cli download pseudotools/pseudocomfy-models \
 ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
 
 # ─────────────────────────────────────────────
+# 6.5. Custom handler with execution metadata
+# ─────────────────────────────────────────────
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY src/handler.py /app/handler.py
+
+# ─────────────────────────────────────────────
 # Diagnostic: verify models and paths
 # ─────────────────────────────────────────────
 RUN echo "=== MODEL DIRECTORY STRUCTURE ===" && \
