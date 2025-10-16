@@ -51,6 +51,16 @@ ENV HF_HUB_DISABLE_SYMLINKS_WARNING=1
 # 6.5. Copy wrapper handler that augments base result with execution metadata
 # ─────────────────────────────────────────────
 COPY handler.py /app/handler.py
+COPY scripts/test_handler.py /app/test_handler.py
+COPY scripts/diagnose_handler.sh /app/diagnose_handler.sh
+RUN chmod +x /app/test_handler.py /app/diagnose_handler.sh && \
+    echo "=== HANDLER FILE VERIFICATION ===" && \
+    ls -la /app/handler.py && \
+    head -5 /app/handler.py && \
+    echo "=== /APP DIRECTORY CONTENTS ===" && \
+    ls -la /app/ && \
+    echo "=== CHECKING FOR CONFLICTING HANDLERS ===" && \
+    find /app -name "*handler*" -type f
 
 # ─────────────────────────────────────────────
 # Diagnostic: verify models and paths
@@ -60,7 +70,9 @@ RUN echo "=== MODEL DIRECTORY STRUCTURE ===" && \
     echo "=== CUSTOM NODES DIRECTORY STRUCTURE ===" && \
     ls -Rlh /comfyui/custom_nodes || true && \
     echo "=== EXTRA MODEL PATHS CONFIG ===" && \
-    cat /comfyui/extra_model_paths.yaml || true
+    cat /comfyui/extra_model_paths.yaml || true && \
+    echo "=== HANDLER VERIFICATION ===" && \
+    python3 /app/test_handler.py || echo "Handler test failed - this is expected during build"
 
 # ─────────────────────────────────────────────
 # 7. Metadata labels

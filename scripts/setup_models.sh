@@ -15,6 +15,10 @@ echo "  • Baked-in models:    ${BAKED_MODELS}"
 echo "  • Network volume path: ${NETWORK_MODELS}"
 echo "================================================"
 
+# Run handler diagnostic
+echo "🔍 Running handler diagnostic..."
+/app/diagnose_handler.sh
+
 mkdir -p "${BAKED_MODELS}"
 
 # Ensure file exists and starts with a header if empty

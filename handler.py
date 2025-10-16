@@ -2,6 +2,12 @@ import os
 import sys
 from typing import Any, Dict, Optional
 
+# Add diagnostic logging at module level
+print(f"[worker_metadata][MODULE] handler.py module loaded at startup")
+print(f"[worker_metadata][MODULE] Python path: {sys.path}")
+print(f"[worker_metadata][MODULE] Current working directory: {os.getcwd()}")
+print(f"[worker_metadata][MODULE] Handler file location: {__file__}")
+
 # Third-party libs used inside the container
 try:
     import requests  # type: ignore
@@ -122,15 +128,25 @@ def _collect_metadata() -> Dict[str, Any]:
 
 
 def handler(job: Dict[str, Any]) -> Dict[str, Any]:
+    print(f"[worker_metadata][INFO] Custom handler.py called with job ID: {job.get('id', 'unknown')}")
+    
     # Import base handler from the image and call it. The base image places rp_handler in /app
     if "/app" not in sys.path:
         sys.path.append("/app")
-    from rp_handler import handler as base_handler  # type: ignore
+    
+    try:
+        from rp_handler import handler as base_handler  # type: ignore
+        print(f"[worker_metadata][INFO] Successfully imported base rp_handler")
+    except ImportError as e:
+        print(f"[worker_metadata][ERROR] Failed to import rp_handler: {e}")
+        # Fallback: return job without metadata if base handler unavailable
+        return {"output": {"error": "Base handler unavailable"}, "worker_metadata": {"error": str(e)}}
 
-    _log_debug("invoking base rp_handler.handler")
+    print(f"[worker_metadata][INFO] Invoking base rp_handler.handler")
     result = base_handler(job)
 
-    _log_debug("collecting worker metadata")
+    print(f"[worker_metadata][INFO] Base handler returned: {type(result)}")
+    print(f"[worker_metadata][INFO] Collecting worker metadata")
     metadata = _collect_metadata()
 
     # Attach metadata without changing images structure
@@ -138,10 +154,13 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         output = result.get("output")
         if isinstance(output, dict):
             output["worker_metadata"] = metadata
+            print(f"[worker_metadata][INFO] Added metadata to output dict")
         else:
             result["worker_metadata"] = metadata
+            print(f"[worker_metadata][INFO] Added metadata to result dict")
         return result
     else:
+        print(f"[worker_metadata][INFO] Wrapping non-dict result with metadata")
         return {"output": result, "worker_metadata": metadata}
 
 
