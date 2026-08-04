@@ -32,7 +32,8 @@ RUN huggingface-cli download pseudotools/pseudocomfy-models \
 # Update this SHA to deploy a newer Pseudocomfy revision.
 ARG PSEUDOCOMFY_COMMIT=b265d767563708fcb6c5ca4cc438d00297367ea7
 
-RUN git clone https://github.com/Pseudotools/Pseudocomfy \
+RUN mkdir -p /app && \
+    git clone https://github.com/Pseudotools/Pseudocomfy \
         /comfyui/custom_nodes/Pseudocomfy && \
     git -C /comfyui/custom_nodes/Pseudocomfy \
         checkout --detach "$PSEUDOCOMFY_COMMIT" && \
