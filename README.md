@@ -1,15 +1,105 @@
-# pt-cloudengine-worker-comfyui-basic
+# pt-cloudengine-worker-basic
 
-Custom RunPod worker for [ComfyUI](https://github.com/comfyanonymous/ComfyUI)  
-Maintained by [Pseudotools](https://github.com/pseudotools)
+Custom RunPod Serverless worker for [ComfyUI](https://github.com/comfyanonymous/ComfyUI), maintained by [Pseudotools](https://github.com/pseudotools).
 
-## Overview
-This worker provides a baseline ComfyUI runtime with:
-- Core SDXL models baked into the image
-- Automatically cloned [Pseudotools "Pseudocomfy" Custom Nodes](https://github.com/Pseudotools/Pseudocomfy)
-- Configurable persistent storage at `/runpod-volume/models` for additional models
+## What this repo is
 
-----
+This is the **worker/deployment** repo. RunPod builds a Docker image from its `Dockerfile` and runs serverless workers from that image.
+
+The image includes:
+
+- A baseline ComfyUI runtime (`runpod/worker-comfyui:5.5.0-base`)
+- Core SDXL models baked in at build time
+- [Pseudocomfy](https://github.com/Pseudotools/Pseudocomfy) custom nodes, **pinned to an exact Git commit**
+- Optional network-volume models at `/runpod-volume/models`
+
+**Important:** Pseudocomfy is a *separate* GitHub repo. Updating Pseudocomfy on GitHub does **not** update running workers by itself. Workers only get new Pseudocomfy code when this worker image is rebuilt with a new pinned commit.
+
+## How deployment works (mental model)
+
+```text
+This repo (Dockerfile)  ──push to main──►  RunPod builds a new Docker image
+                                              │
+Pseudocomfy repo        ──cloned once──►      │  (at image build time, at the pinned SHA)
+                                              ▼
+                                         Workers run from that frozen image
+```
+
+- Pseudocomfy is cloned **during the Docker build**, not when a worker starts.
+- Changing Pseudocomfy `main` alone does nothing to production until you change the SHA in *this* Dockerfile and push.
+- On this endpoint, a **push to `main`** typically starts a new RunPod build (releases are not required).
+
+### RunPod Builds console
+
+Watch builds / logs / status here (replace `[ENDPOINTID]` with your endpoint ID):
+
+https://console.runpod.io/serverless/user/endpoint/[ENDPOINTID]?tab=builds
+
+Statuses go through Pending → Building → Uploading → Testing → Completed (or Failed). Open the failed build’s log if something breaks.
+
+---
+
+## Updating Pseudocomfy on the worker
+
+Do this whenever you want production workers to use a newer Pseudocomfy version.
+
+### What a SHA is
+
+A **SHA** (also called a commit hash) is Git’s unique ID for one exact snapshot of a repository — a long string of hex characters, e.g.:
+
+```text
+b265d767563708fcb6c5ca4cc438d00297367ea7
+```
+
+Pinning that SHA means the image always gets *that* Pseudocomfy revision, not “whatever `main` happens to be today.” Changing the SHA also forces Docker to rebuild that layer instead of reusing a stale cached clone.
+
+### Where to find the latest Pseudocomfy SHA
+
+1. Open [Pseudotools/Pseudocomfy](https://github.com/Pseudotools/Pseudocomfy).
+2. Make sure you’re on the branch you want (usually `main`).
+3. Click the latest commit on that branch (commit message / timestamp).
+4. On the commit page, click the **copy** icon next to the full commit hash (or expand the short hash). You need the **full** SHA, not just the first 7 characters.
+
+Shortcuts:
+
+- Commits list: https://github.com/Pseudotools/Pseudocomfy/commits/main  
+- Or from a terminal: `git ls-remote https://github.com/Pseudotools/Pseudocomfy.git HEAD`
+
+### Step-by-step
+
+1. **Get the Pseudocomfy SHA** you want to deploy (see above).
+2. **Edit this repo’s `Dockerfile`.** Find:
+
+   ```dockerfile
+   ARG PSEUDOCOMFY_COMMIT=...
+   ```
+
+   Replace the value with the full new SHA.
+3. **Optional:** bump `LABEL version="..."` in the Dockerfile (informational only).
+4. **Commit and push** to `main` on this worker repo.
+5. **Open the RunPod Builds tab** and confirm a new build starts:
+
+   https://console.runpod.io/serverless/user/endpoint/[ENDPOINTID]?tab=builds
+
+6. **In the build log**, confirm checkout succeeded. You should see something like:
+
+   ```text
+   HEAD is now at b265d76 ...
+   b265d767563708fcb6c5ca4cc438d00297367ea7
+   ```
+
+   The printed SHA should match what you put in the Dockerfile. The same value is also written into the image at `/app/PSEUDOCOMFY_COMMIT`.
+7. Wait for status **Completed**.
+8. **Send a test job** that exercises the updated custom nodes.
+
+If the build fails, read the log near `ERROR` / `tee:` / `pip install` — common issues are a bad SHA, missing `/app` paths, or Pseudocomfy dependency install failures.
+
+### What not to do
+
+- Do **not** add a runtime `git pull` of Pseudocomfy on worker start. That makes workers non-reproducible and harder to roll back.
+- Do **not** expect a Pseudocomfy-only push to update this endpoint. Always update `PSEUDOCOMFY_COMMIT` here and rebuild.
+
+---
 
 ## Execution Metadata (Location + Hardware) – Design Notes
 
@@ -221,22 +311,26 @@ Under **Environment Variables**, add the following:
 
 ### 🧱 4. Build and Deploy
 
-Click **Deploy Worker**.
-RunPod will automatically:
+Click **Deploy Worker** for the first build. After that, pushes to `main` typically start a new build automatically.
+
+RunPod will:
 
 1. Clone this repository.
-2. Build the Docker image using the provided Dockerfile.
+2. Build the Docker image from the Dockerfile (including the pinned Pseudocomfy SHA).
 3. Download core models from [Hugging Face](https://huggingface.co/pseudotools/pseudocomfy-models).
-4. Clone and install [Pseudocomfy custom nodes](https://github.com/Pseudotools/Pseudocomfy).
-5. Register the worker with the RunPod job system.
+4. Clone Pseudocomfy at the pinned commit and install its requirements.
+5. Register / update the worker image for the endpoint.
 
-Build time typically takes 20–30 minutes (depending on model size).
-You can monitor progress in **Build Logs**.
+Build time is often 20–30+ minutes (large models). Monitor progress in the endpoint **Builds** tab:
+
+https://console.runpod.io/serverless/user/endpoint/[ENDPOINTID]?tab=builds
 
 ✅ **Build succeeds when:**
 
 * Model downloads complete without errors.
 * Custom nodes install successfully.
+* The log shows the expected Pseudocomfy SHA (and `/app/PSEUDOCOMFY_COMMIT` was written).
+* Status reaches **Completed**.
 * The worker logs show it’s “ready” or listening for RunPod jobs.
 
 ---
@@ -437,6 +531,7 @@ This allows your local or cloud services to dispatch jobs directly to this worke
 
 ### ✅ 9. Notes and Best Practices
 
+* **Updating Pseudocomfy:** Edit `PSEUDOCOMFY_COMMIT` in the Dockerfile, push to `main`, then watch Builds. Full steps are at the top of this README.
 * **Build limits:** RunPod GitHub builds must complete within 160 minutes and stay under 80 GB total image size.
 * **Security:** Never bake secrets or tokens into the Dockerfile.
 * **Variants:**
@@ -469,7 +564,7 @@ The Dockerfile builds a ComfyUI worker that:
 - Uses the official RunPod ComfyUI base image
 - Installs git and Python dependencies (huggingface_hub, gitpython)
 - Downloads 7 core models from Hugging Face to `/comfyui/models`
-- Clones Pseudotools custom nodes to `/comfyui/custom_nodes/Pseudocomfy`
+- Clones Pseudocomfy at a **pinned commit SHA** (`ARG PSEUDOCOMFY_COMMIT=...`) into `/comfyui/custom_nodes/Pseudocomfy`
 - Sets up dynamic model path configuration via startup script
 - Configures ComfyUI to find both baked-in and network-mounted models
 
