@@ -28,9 +28,19 @@ RUN huggingface-cli download pseudotools/pseudocomfy-models \
 # 4. Clone Pseudotools custom nodes
 # Reference: https://github.com/Pseudotools/Pseudocomfy
 # ─────────────────────────────────────────────
-RUN git clone https://github.com/Pseudotools/Pseudocomfy /comfyui/custom_nodes/Pseudocomfy
-WORKDIR /comfyui/custom_nodes/Pseudocomfy
-RUN pip install --no-cache-dir -r requirements.txt
+# Pin to an exact source version.
+# Update this SHA to deploy a newer Pseudocomfy revision.
+ARG PSEUDOCOMFY_COMMIT=b265d767563708fcb6c5ca4cc438d00297367ea7
+
+RUN git clone https://github.com/Pseudotools/Pseudocomfy \
+        /comfyui/custom_nodes/Pseudocomfy && \
+    git -C /comfyui/custom_nodes/Pseudocomfy \
+        checkout --detach "$PSEUDOCOMFY_COMMIT" && \
+    git -C /comfyui/custom_nodes/Pseudocomfy \
+        rev-parse HEAD | tee /app/PSEUDOCOMFY_COMMIT && \
+    pip install --no-cache-dir \
+        -r /comfyui/custom_nodes/Pseudocomfy/requirements.txt
+
 WORKDIR /app
 
 # ─────────────────────────────────────────────
@@ -62,7 +72,7 @@ RUN echo "=== MODEL DIRECTORY STRUCTURE ===" && \
 # ─────────────────────────────────────────────
 LABEL maintainer="pseudotools"
 LABEL description="Pseudotools ComfyUI worker with baked required custom nodes and commonly-used models"
-LABEL version="0.1.0"
+LABEL version="0.1.1"
 
 # ─────────────────────────────────────────────
 # 8. Runtime setup and entrypoint
